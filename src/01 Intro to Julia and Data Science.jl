@@ -70,6 +70,8 @@ end
 using Statistics: mean, std
 import StatsBase as SB
 using Statistics
+using Pkg
+
 # Note that if you don't have `StatsBase`, you can add it using `using Pkg; Pkg.add("StatsBase")`.
 # Right, let's now compute some simple statistics:
 using Random

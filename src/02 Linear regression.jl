@@ -18,8 +18,9 @@ measures("F1")
 
 mdls = models(matching(X, y))
 
+y
 # Linear regression
-
+Pkg.add("MLJLinearModels")
 LR = @load LinearRegressor pkg = MLJLinearModels
 
 # Note: in order to be able to load this, you **must** have the relevant package in your environment, if you don't, you can always add it (``using Pkg; Pkg.add("MLJLinearModels")``).
@@ -41,7 +42,7 @@ println(first(data, 3))
 # Here we will just interpret the integer features as continuous as we will just use a basic linear regression:
 
 data = coerce(data, autotype(data, :discrete_to_continuous))
-
+data
 # Let's also extract the target variable (`MedV`):
 
 y = data.MedV
@@ -145,3 +146,45 @@ plot!(Xnew.LStat, MLJ.predict(mach, Xnew), linewidth=3, color=:orange)
 
 
 # TODO HW : Find the best model by feature selection; best model means highest R²
+
+import Pkg
+Pkg.add("Combinatorics")
+Pkg.activate(".") 
+Pkg.status() 
+using MLJ, MLJLinearModels, RDatasets, DataFrames, Statistics, Combinatorics
+
+
+y = data.MedV
+X = select(data, Not(:MedV))
+model = LR()
+names(X)
+feature_names = names(X)
+best_r2 = 0
+best_features = []
+best_model = nothing
+
+combinations(feature_names,1)
+
+for k in 1:length(feature_names)
+    println(k)
+    for subset in combinations(feature_names, k)
+        # println(subset)
+        X_sub = select(X, subset)
+        mach = machine(model, X_sub, y)
+        fit!(mach)
+        ŷ = MLJ.predict(mach, X_sub)
+        r2 = rsquared(ŷ, y)
+        if r2 > best_r2
+            best_r2 = r2
+            best_features = subset
+            best_model = mach
+        end
+    end
+end
+
+println("Best R²: ", best_r2)
+println("Best feature subset: ", best_features)
+
+# Best R²: 0.7406426641094094
+# Best feature subset: ["Crim", "Zn", "Indus", "Chas", "NOx", "Rm", "Age", "Dis", "Rad", "Tax", "PTRatio", "Black", "LStat"]
+ 
