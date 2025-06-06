@@ -169,3 +169,101 @@ best_models_mse_std = std(rep.best_history_entry.per_fold[1])^2
 # Question - How can we use linear regression for classification?
 
 
+# for feature Horsepower
+hp = X.Horsepower
+Xhp = DataFrame([hp .^ i for i in 1:10], :auto) 
+
+LinMod = Pipeline(FeatureSelector(), LR())
+
+mse_list = Float64[]
+for degree in 1:10
+    selected_features = [Symbol("x$j") for j in 1:degree]
+    LinMod.feature_selector.features = selected_features
+    model = machine(LinMod, Xhp, y)
+    fit!(model, rows=train)
+    mse = rms(MLJ.predict(model, rows=test), y[test])^2
+    push!(mse_list, mse)
+    println("Degree $degree: MSE = $mse")
+end
+mse_list
+plot(1:10, mse_list, xlabel="Polynomial Degree", ylabel="Test MSE", marker=:circle, linewidth=2, title="MSE vs Polynomial Degree", size=(800, 600))
+# here MSE at 10th degree is 187.498 which is exponeltial 
+
+# for all numerical features 
+numeric_features = names(select(X, Not(:Name)))
+X_poly = DataFrame()
+for f in numeric_features
+    for d in 1:10
+        colname = Symbol("$(f)_pow$(d)")
+        print(colname)
+        X_poly[!, colname] = X[!, f].^d
+    end
+end
+X_poly
+
+X_poly = DataFrame()
+for feature in numeric_features
+    feature_values = X[!, feature]
+    for degree in 1:10
+        col_name = Symbol("$(feature)_deg$(degree)")
+        X_poly[!, col_name] = feature_values .^ degree
+    end
+end
+LinMod = Pipeline(
+    FeatureSelector(),
+    LR()
+)
+cases = [vcat([Symbol("$(feature)_deg$j") for feature in numeric_features for j in 1:i]) for i in 1:10]
+r = range(LinMod, :(feature_selector.features), values=cases)
+tm = TunedModel(
+    model=LinMod,
+    ranges=r,
+    resampling=CV(nfolds=10, rng=444),
+    measure=rms
+)
+mtm = machine(tm, X_poly, y)
+fit!(mtm)
+rep = report(mtm)
+res = rep.plotting
+best_model = rep.best_model
+best_features = best_model.feature_selector.features
+
+best_mach = machine(LinMod, X_poly, y)
+best_mach.model.feature_selector.features = best_features
+fit!(best_mach, rows=train)
+mse_best = rms(MLJ.predict(best_mach, rows=test), y[test])^2
+@show mse_best
+
+best_mse_mean = mean(rep.best_history_entry.per_fold[1])^2
+best_mse_std = std(rep.best_history_entry.per_fold[1])^2
+@show best_mse_mean
+@show best_mse_std
+
+
+hp = X.Horsepower
+hpn = range(50, 225, length=100) |> collect
+Xnew = DataFrame()
+for feature in numeric_features
+    if feature == :Horsepower
+        feature_values = hpn
+    else
+        # For other features, use the mean value for simplicity in visualization
+        feature_values = fill(mean(X[!, feature]), length(hpn))
+    end
+    for degree in 1:10
+        col_name = Symbol("$(feature)_deg$(degree)")
+        Xnew[!, col_name] = feature_values .^ degree
+    end
+end
+
+yy_best = MLJ.predict(best_mach, Xnew)
+
+begin
+    plot(X.Horsepower, y, seriestype=:scatter, label="Data", legend=:topright, size=(800, 600))
+    plot!(hpn, yy_best, label="Best Polynomial Model", linewidth=3, color=:orange)
+    xlabel!("Horsepower")
+    ylabel!("MPG")
+end
+
+# Print the best features and their degrees
+println("Best feature set: ", best_features)
