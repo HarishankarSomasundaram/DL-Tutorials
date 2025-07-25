@@ -19,6 +19,7 @@ measures("F1")
 mdls = models(matching(X, y))
 
 y
+using Pkg
 # Linear regression
 Pkg.add("MLJLinearModels")
 LR = @load LinearRegressor pkg = MLJLinearModels
@@ -27,6 +28,7 @@ LR = @load LinearRegressor pkg = MLJLinearModels
 #
 # Let's load the _boston_ data set
 
+import DataFrames
 import RDatasets: dataset
 import DataFrames: describe, select, Not, rename!
 data = dataset("MASS", "Boston")
@@ -65,6 +67,8 @@ fp = fitted_params(mach_uni)
 @show fp.intercept
 
 # You can also visualise this
+
+mean(data.LStat)
 
 using Plots
 
@@ -127,6 +131,8 @@ round(rsquared(ŷ, y), sigdigits=4)
 # We get slightly better results but nothing spectacular.
 #
 # Let's get back to the lab where they consider regressing the target variable on `lstat` and `lstat^2`; again, it's essentially a case of defining the right DataFrame:
+using DataFrames
+X3 = DataFrame(hcat(X.LStat, X.LStat .^ 2), [:LStat, :LStat2])
 
 X3 = DataFrame(hcat(X.LStat, X.LStat .^ 2), [:LStat, :LStat2])
 mach = machine(model, X3, y)
@@ -146,45 +152,69 @@ plot!(Xnew.LStat, MLJ.predict(mach, Xnew), linewidth=3, color=:orange)
 
 
 # TODO HW : Find the best model by feature selection; best model means highest R²
-
-import Pkg
-Pkg.add("Combinatorics")
-Pkg.activate(".") 
-Pkg.status() 
-using MLJ, MLJLinearModels, RDatasets, DataFrames, Statistics, Combinatorics
-
+using DataFrames: Between
+using Logging
+global_logger(SimpleLogger(stderr, Logging.Error))
 
 y = data.MedV
 X = select(data, Not(:MedV))
+
+# Let's declare a simple multivariate linear regression model:
+
 model = LR()
-names(X)
-feature_names = names(X)
-best_r2 = 0
-best_features = []
-best_model = nothing
-
-combinations(feature_names,1)
-
-for k in 1:length(feature_names)
-    println(k)
-    for subset in combinations(feature_names, k)
-        # println(subset)
-        X_sub = select(X, subset)
-        mach = machine(model, X_sub, y)
-        fit!(mach)
-        ŷ = MLJ.predict(mach, X_sub)
-        r2 = rsquared(ŷ, y)
-        if r2 > best_r2
-            best_r2 = r2
-            best_features = subset
-            best_model = mach
-        end
-    end
+ 
+function fit_machine(columns)
+    print(columns)
+    model = LR()
+    mach = machine(model, X[:,columns], y)
+    fit!(mach)
+    ŷ = MLJ.predict(mach, X[:,columns])
+    return round(rsquared(ŷ, y), sigdigits=4)
 end
+d = Dict()
+i=2
+columns_outer = [] 
+d = Dict()
+for col1 in names(X)[2:end]
+    columns_outer = []
+    push!(columns_outer,"Crim")
+    push!(columns_outer,string(col1))
 
-println("Best R²: ", best_r2)
-println("Best feature subset: ", best_features)
+    d[Tuple(columns_outer)] = 0
+    # push!(columns_outer,string(col1))
+    # println(col1)
+end  
+for col1 in names(X) 
+    columns_inner = []
+    push!(columns_inner,string(col1)) 
+    for col2 in names(X)[i:end]
+        # column_temp = [col1,col2]
+        # d[column_temp] = fit_machine(column_temp)  
+        push!(columns_inner,string(col2))
+        # d[columns_inner] = fit_machine(columns_inner)
+        println(columns_inner) 
+        d[Tuple(columns_inner)] = 0
+        # print(fit_machine(columns_inner))
+    end
+    global i+=1
+end
+d
+  
+pairs = collect(d)
+for i in 1:length(pairs)
+    d[pairs[i][1]] = fit_machine(collect(pairs[i][1]))
+    # println("Key: $(pairs[i][1]), Value: $(pairs[i][2])")
+end
+d
 
-# Best R²: 0.7406426641094094
+sorted_pairs = sort(collect(d), by = x -> x[2], rev = true)  # x[2] is the value
+
+println(sorted_pairs[1])
+ 
+ 
+#Pair{Any, Any}(("Crim", "Zn", "Indus", "Chas", "NOx", "Rm", "Age", "Dis", "Rad", "Tax", "PTRatio", "Black", "LStat"), 0.7406)
+
+
+# Best R²: 0.7406
 # Best feature subset: ["Crim", "Zn", "Indus", "Chas", "NOx", "Rm", "Age", "Dis", "Rad", "Tax", "PTRatio", "Black", "LStat"]
  
